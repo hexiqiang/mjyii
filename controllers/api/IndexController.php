@@ -28,7 +28,18 @@ class IndexController extends CommonController
         $data['controlrecord'] = $this -> GetControlRecord();
         $data['joinrecord'] = $this -> GetJoinRecord();
         $data['message'] = $this -> GetMessage();
+        $data['call'] = $this -> getLastCall();
         $this->returnJson(0,'查询成功',$data);
+    }
+
+    //获取最后一条报警信息
+    public function getLastCall()
+    {
+        $model = new Callrecord();
+        $query = new Query();
+        $where = $this -> getMemberRule();
+        $data = $query -> from($model::tableName()) -> where($where) -> orderBy('id desc') -> one();
+        return $data;
     }
 
     //查询当前的项目总数与在线数量

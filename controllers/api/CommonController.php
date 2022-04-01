@@ -233,4 +233,80 @@ class CommonController extends Controller
         }
 
     }
+
+    public function curl_data($url)
+    {
+        $ch = curl_init();//初始化curl
+        curl_setopt($ch, CURLOPT_URL,$url); //要访问的地址
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);//跳过证书验证
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // 从证书中检查SSL加密算法是否存在
+        $data = json_decode(curl_exec($ch));
+        if(curl_errno($ch)){
+            curl_error($ch); //若错误打印错误信息
+        }
+        //打印信息
+        curl_close($ch);//关闭curl
+        return $data;
+    }
+
+    public function getWxToken($appid, $appsecret)
+    {
+        $token = Yii::$app -> redis -> get('token');
+        if ($token){
+            return $token;
+        }else{
+            $url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$appid&secret=$appsecret";
+            $data = $this->curl_data($url);
+            $access_token = $data -> access_token;
+            Yii::$app -> redis -> set('token',$access_token);
+            Yii::$app -> redis -> expire('token',7000);
+            return $access_token;
+        }
+
+    }
+
+    public function getToken()
+    {
+        $query = new Query();
+        $re = $query -> from('mj_setting') -> select(['appid', 'appsecret']) -> one();
+        $access_token = $this -> getWxToken($re['appid'],$re['appsecret']);
+        return $access_token;
+    }
+
+
+
+    //报警小程序发送服务通知
+    //Hc7gzOPdRrXFLI9AJ-Iie8kZ4YY6E4jLiZCpLFv-EMI
+    //https://api.weixin.qq.com/cgi-bin/message/wxopen/template/uniform_send?access_token=ACCESS_TOKEN
+    //请求参数
+
+
+    public function curl_post($url , $data){
+
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, $url);
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
+
+        // POST数据
+
+        curl_setopt($ch, CURLOPT_POST, 1);
+
+        // 把post的变量加上
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+
+        $output = curl_exec($ch);
+
+        curl_close($ch);
+
+        return $output;
+
+    }
 }

@@ -537,4 +537,29 @@ class WindexController extends CommonController
         $data['map_position'] = json_decode($data['map_position'],true);
         $this->returnJson(0,'success',$data);
     }
+
+
+    //获取小程序的openid
+    public function actionLogin()
+    {
+        if (Yii::$app -> request -> isPost){
+            $code = Yii::$app -> request -> post('code');
+            $mid = Yii::$app -> request -> post('mid');
+            $token = $this -> getToken();
+            $query = new Query();
+            $re = $query -> from('mj_setting') -> select(['appid', 'appsecret']) -> one();
+            $url = "https://api.weixin.qq.com/sns/jscode2session?appid=".$re['appid']."&secret=".$re['appsecret']."&js_code=".$code."&grant_type=authorization_code";
+//            print_r($url);
+            $data = $this->curl_data($url);
+            $openid = $data -> openid;
+//            print_r($openid);
+            $query = new Query();
+            $result = $query -> from('mj_member_openid') -> where(['openid' => $openid]) -> one();
+//            print_r($result);
+            if (!$result){
+                $data = ['mid' => $mid, 'openid' => $openid];
+                $re = Yii::$app -> db -> createCommand() -> insert('mj_member_openid',$data) -> execute();
+            }
+        }
+    }
 }
