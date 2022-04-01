@@ -50,7 +50,7 @@ class StreamController extends CommonController
     {
         if (Yii::$app -> request -> isPost){
             $data = Yii::$app -> request -> post();
-            if (!empty($data['gateway_name']) && !empty($data['gateway_id'])){
+            if (!empty($data['stream_name']) && !empty($data['cloud_var'])){
                 $project = new Stream();
                 $data['edit_date'] = date('Y-m-d H:i:s',time());
                 $result = $project -> updateStream($data);
