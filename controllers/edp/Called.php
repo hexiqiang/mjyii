@@ -19,6 +19,7 @@ use app\models\Joinsproject;
 use app\models\Projects;
 use app\models\Stream;
 use app\models\Trigger;
+use app\models\Userproject;
 use Yii;
 use yii\db\Query;
 
@@ -73,7 +74,9 @@ class Called
             $data['add_date'] = date('Y-m-d H:i:s',time());
             $model = new Callrecord();
             $data['call_message'] = $data['call_name'] . ':报警值' . $value;
-            $data['call_type'] = $this -> sendMsg($data['cid']);
+            $openid = $this -> getMid($data['pid']);
+            file_put_contents(Yii::$app->basePath . '/web/log/reboot.txt','发送'.$openid.PHP_EOL,FILE_APPEND);
+            $data['call_type'] = $this -> sendMsg($data['cid'], $data['gateway_name'], $data['call_name'], $data['call_message'], $data['call_date'], $openid);
             $data['call_status'] = '等待中';
             if ($data['call_type']){
                 $data['call_status'] = '报警中';
@@ -82,30 +85,64 @@ class Called
             Yii::$app -> db -> close();
         }
     }
+    //根据工程获取用户的mid
+    public function getMid($pid)
+    {
+        $query = new Query();
+        $m = new Userproject();
+        $project = $query -> from($m::tableName()) -> select('mid', 'pid') -> all();
+        $mid = '';
+        foreach ($project as $k => $v){
+            $project[$k]['pid'] = json_decode($v['pid'],true);
+        }
+        foreach ($project as $k => $v){
+            if (is_array($v['pid'])){
+                foreach ($v['pid'] as $va){
+                    if ($pid == $va){
+                        $mid = $k['mid'];
+                        break;
+                    }
+                }
+            }else{
+                break;
+            }
+        }
+        $query = new Query();
+        $openid = $query -> from('mj_member_openid') -> where(['mid' => $mid]) -> select('openid') -> one();
+        if (!$openid){
+            $openid = $query -> from('mj_member_openid') -> where(['mid' => 19]) -> select('openid') -> one();
+        }
+        return $openid['openid'];
+    }
+
 
     //报警通知
 
     /**
      * @param $cid 报警器管理id
      */
-    public function sendMsg($cid)
+    public function sendMsg($cid, $gateway_name, $call_name, $call_message, $call_time, $openid)
     {
         $model = new Call();
         $query = new Query();
-        $result = $query -> from($model::tableName()) -> where(['id' => $cid]) -> select(['call_type', 'call_phone']) -> one();
+        $result = $query -> from($model::tableName()) -> where(['id' => $cid]) -> select(['call_type', 'call_phone','id']) -> one();
         $type = json_decode($result['call_type'], true);
-        $result = $this -> callDoing($type);
+        file_put_contents(Yii::$app->basePath . '/web/log/reboot.txt','发送'.$gateway_name.PHP_EOL,FILE_APPEND);
+        $result = $this -> callDoing($type, $gateway_name, $call_name, $call_message, $call_time, $openid);
         return $result;
     }
 
     // 报警通知操作
-    public function callDoing($type)
+    public function callDoing($type, $gateway_name,$call_name,$call_message,$call_time,$openid)
     {
+        file_put_contents(Yii::$app->basePath . '/web/log/reboot.txt','发送'.$call_name.PHP_EOL,FILE_APPEND);
+        $this -> wxsend($gateway_name,$call_name,$call_message,$call_time,$openid);
         foreach ($type as $v) {
             switch ($v){
                 case 'app':
                     //doing
                     return 'app通知';
+
                     break;
                 case '短信':
                     //doing:
@@ -160,19 +197,19 @@ class Called
         $model = new Joinsproject();
         //查询该网关关联了多少个联控
         $data = $query -> from($model::tableName()) -> where(['gid' => $gid]) -> select(['jid', 'threshold', 'equation','condition']) -> all();
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($data).'111'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($data).'111'.PHP_EOL,FILE_APPEND);
         // 通过分析获取需要发送命令的联控
         $jid = $this -> getEqua($data,$value);
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($jid).'222'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($jid).'222'.PHP_EOL,FILE_APPEND);
         //获取同一个联控下的所有条件
         $condition = $this -> getConditionRow($jid, $value);
 
         // 根据条件判断是否需要触发命令
         $jid = $this -> isSendOrder($condition);
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($jid).'3333'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($jid).'3333'.PHP_EOL,FILE_APPEND);
         // 获取联控的下发命令
         $order = $this -> getJoinsOrders($jid);
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'555'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'555'.PHP_EOL,FILE_APPEND);
         $this -> getOrderSend($order);
         // 触发命令后保存数据
     }
@@ -222,7 +259,7 @@ class Called
             }
             array_push($conditionArr,['condition' => $condition, 'jid' => $join_id]);
         }
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($conditionArr).'3333'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($conditionArr).'3333'.PHP_EOL,FILE_APPEND);
         return $conditionArr;
     }
 
@@ -265,7 +302,7 @@ class Called
     //根据要下发的命令进行命令下发
     public function getOrderSend($order)
     {
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'进入发送命令'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'进入发送命令'.PHP_EOL,FILE_APPEND);
         foreach ($order as $item => $v) {
             $this -> saveJoinControlRecord($v);
             $this -> sendOrder($v['recovery_value'], $v['gid'], $v['sid']);
@@ -280,13 +317,13 @@ class Called
         $query = new Query();
         $model = new  Gateway();
         $gateway = $query -> from($model::tableName()) -> where(['id' => $gid]) -> select(['gateway_id','master_apikey', 'net_type']) -> one();
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'进入发送命令判断区域'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'进入发送命令判断区域'.PHP_EOL,FILE_APPEND);
         switch ($gateway['net_type']){
             case '中移动EDP':
                 $this -> sendEDP($order, $gateway['gateway_id'], $gateway['master_apikey'], $gid, $sid);
                 break;
             case '网关MQTT':
-                file_put_contents(Yii::$app->basePath . '/web/log/ed.log','数据流id:'.$sid.PHP_EOL,FILE_APPEND);
+//                file_put_contents(Yii::$app->basePath . '/web/log/ed.log','数据流id:'.$sid.PHP_EOL,FILE_APPEND);
                 $this -> sendMQTT($order,$gateway['gateway_id'],$gid, $sid);
                 break;
         }
@@ -313,13 +350,13 @@ class Called
     //发送中移动的命令
     public function sendEDP($order, $gateway_id, $master_apikey, $gid, $sid)
     {
-        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'发送mqtt'.PHP_EOL,FILE_APPEND);
+//        file_put_contents(Yii::$app->basePath . '/web/log/ed.log',json_encode($order).'发送mqtt'.PHP_EOL,FILE_APPEND);
         $one = new OneNetApi($master_apikey);
         $result = $one -> send_data_to_edp_mqtt_use_device_id($gateway_id, $order,['timeout' => 300]);
         if ($result){
             $pk = $this -> saveControl($gid, $order, $sid);
             $res = $this -> getGatewayRes($master_apikey,$result['cmd_uuid'], $pk, $gid);
-            file_put_contents(Yii::$app->basePath . '/web/log/order.txt',json_encode($res)  .PHP_EOL,FILE_APPEND);
+//            file_put_contents(Yii::$app->basePath . '/web/log/order.txt',json_encode($res)  .PHP_EOL,FILE_APPEND);
         }else{
             $this->returnJson(-1,'命令发送失败');
         }
@@ -411,6 +448,114 @@ class Called
             $pk = Yii::$app -> db -> getLastInsertID();
             Yii::$app -> db -> close();
         }
+    }
+
+
+
+    //报警小程序发送服务通知
+    //Hc7gzOPdRrXFLI9AJ-Iie8kZ4YY6E4jLiZCpLFv-EMI
+    //https://api.weixin.qq.com/cgi-bin/message/wxopen/template/uniform_send?access_token=ACCESS_TOKEN
+    //请求参数
+
+    public function wxsend($gateway_name, $call_name, $call_message, $call_time, $openid)
+    {
+
+        $template_id = 'kv9SC6IHFkxYGlVwhB9iBGH45ve6gLxAjSn7rC_HILw';
+        $msg = [
+            'thing1' => ['value'=>$gateway_name],
+            'thing2' => ['value'=> $call_name],
+            'time3' => ['value'=> $call_time],
+            'thing4' => ['value'=> $call_message],
+        ];
+        $access_token = $this->getToken();
+        //请求url
+        $url = 'https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=' . $access_token ;
+        //发送内容
+        $data = [] ;
+        $data['touser'] = $openid;  //用户的openid
+        $data['template_id'] = $template_id; //所需下发的订阅模板id
+        //点击模板卡片后的跳转页面，仅限本小程序内的页面。支持带参数,（示例index?foo=bar）。该字段不填则模板无跳转。
+        $data['page'] = 'pages/called/index';
+        //模板内容，格式形如 { "key1": { "value": any }, "key2": { "value": any } }
+        $data['data'] = $msg;
+        //跳转小程序类型：developer为开发版；trial为体验版；formal为正式版；默认为正式版
+        $data['miniprogram_state'] = 'developer';
+        $data['lang'] = 'zh_CN';
+        $json_data = json_encode($data);
+        file_put_contents(Yii::$app->basePath . '/web/log/reboot.txt','发送'.$json_data.PHP_EOL,FILE_APPEND);
+        return [
+            'openid' => $openid,
+            'data' => $this->curl_post($url, $json_data)//这里面就是个curl请求 , 转成数组返回
+        ];
+    }
+
+
+    public function curl_post($url , $data){
+
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, $url);
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
+
+        // POST数据
+
+        curl_setopt($ch, CURLOPT_POST, 1);
+
+        // 把post的变量加上
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+
+        $output = curl_exec($ch);
+
+        curl_close($ch);
+
+        file_put_contents(Yii::$app->basePath . '/web/log/reboot.txt','接收'.json_encode($output,true).PHP_EOL,FILE_APPEND);
+        return $output;
+    }
+
+    public function curl_data($url)
+    {
+        $ch = curl_init();//初始化curl
+        curl_setopt($ch, CURLOPT_URL,$url); //要访问的地址
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);//跳过证书验证
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // 从证书中检查SSL加密算法是否存在
+        $data = json_decode(curl_exec($ch));
+        if(curl_errno($ch)){
+            curl_error($ch); //若错误打印错误信息
+        }
+        //打印信息
+        curl_close($ch);//关闭curl
+        return $data;
+    }
+
+    public function getWxToken($appid, $appsecret)
+    {
+        $token = Yii::$app -> redis -> get('token');
+        if ($token){
+            return $token;
+        }else{
+            $url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$appid&secret=$appsecret";
+            $data = $this->curl_data($url);
+            $access_token = $data -> access_token;
+            Yii::$app -> redis -> set('token',$access_token);
+            Yii::$app -> redis -> expire('token',7000);
+            return $access_token;
+        }
+
+    }
+
+    public function getToken()
+    {
+        $query = new Query();
+        $re = $query -> from('mj_setting') -> select(['appid', 'appsecret']) -> one();
+        $access_token = $this -> getWxToken($re['appid'],$re['appsecret']);
+        return $access_token;
     }
 
 }

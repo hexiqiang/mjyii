@@ -276,37 +276,4 @@ class CommonController extends Controller
 
 
 
-    //报警小程序发送服务通知
-    //Hc7gzOPdRrXFLI9AJ-Iie8kZ4YY6E4jLiZCpLFv-EMI
-    //https://api.weixin.qq.com/cgi-bin/message/wxopen/template/uniform_send?access_token=ACCESS_TOKEN
-    //请求参数
-
-
-    public function curl_post($url , $data){
-
-        $ch = curl_init();
-
-        curl_setopt($ch, CURLOPT_URL, $url);
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
-
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
-
-        // POST数据
-
-        curl_setopt($ch, CURLOPT_POST, 1);
-
-        // 把post的变量加上
-
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-
-        $output = curl_exec($ch);
-
-        curl_close($ch);
-
-        return $output;
-
-    }
 }
